@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>PDF 表单填写（A 路线：真正表单 PDF）</title>
+  <title>PDF 表单填写（A 路线）</title>
 
   <style>
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", Arial; margin: 16px; }
@@ -16,61 +16,39 @@
 
     #stage { position: relative; display: inline-block; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; }
     #pdfCanvas { display:block; border-radius: 8px; }
-    #annotationLayer {
-      position:absolute;
-      left:8px; top:8px;
-      width:0; height:0;
-    }
+    #annHost { position:absolute; left:8px; top:8px; }
 
-    /* 让表单控件看起来“像在 PDF 上写字”，而不是网页输入框 */
-    #annotationLayer .annotationLayer input,
-    #annotationLayer .annotationLayer textarea,
-    #annotationLayer .annotationLayer select {
+    /* 让表单控件更像 PDF 编辑器 */
+    #annHost .annotationLayer input,
+    #annHost .annotationLayer textarea,
+    #annHost .annotationLayer select {
       background: transparent !important;
       border: none !important;
       outline: none !important;
       box-shadow: none !important;
-      font-size: 14px;
       padding: 0;
       margin: 0;
+      font-size: 14px;
     }
-    /* 聚焦时给一点点提示（像编辑器一样） */
-    #annotationLayer .annotationLayer input:focus,
-    #annotationLayer .annotationLayer textarea:focus,
-    #annotationLayer .annotationLayer select:focus {
+    #annHost .annotationLayer input:focus,
+    #annHost .annotationLayer textarea:focus,
+    #annHost .annotationLayer select:focus {
       outline: 1px dashed #60a5fa !important;
       border-radius: 4px;
     }
 
     /* 手写签名覆盖层 */
-    #sigWrap {
-      position:absolute;
-      display:none;
-      z-index: 20;
-    }
-    #sigCanvas {
-      border: 1px dashed #9ca3af;
-      border-radius: 10px;
-      background: rgba(255,255,255,0.9);
-      touch-action: none;
-    }
+    #sigWrap { position:absolute; display:none; z-index: 20; }
+    #sigCanvas { border: 1px dashed #9ca3af; border-radius: 10px; background: rgba(255,255,255,0.9); touch-action: none; }
     .badge { padding:4px 8px; border-radius:999px; background:#111827; color:white; font-size:12px; }
   </style>
 
-  <!-- ✅ ESM 模块加载本地 PDF.js（你仓库里已有 pdf.mjs / pdf.worker.mjs） -->
-  <script type="module">
-    import * as pdfjsLib from './pdf.mjs';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.mjs';
-    window.pdfjsLib = pdfjsLib;
-  </script>
-
-  <!-- ✅ pdf-lib + 签名库 -->
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 </head>
 
 <body>
-  <h1>PDF 表单填写（点哪填哪 / 点框勾选 / 手写签名 / 导出打印）</h1>
+  <h1>PDF 表单填写（点哪填哪 / 勾选 / 签名 / 导出）</h1>
 
   <div class="row">
     <button id="loadTpl" class="btn secondary">加载模板（consent_form.pdf）</button>
@@ -82,7 +60,7 @@
 
     <label class="row" style="gap:6px">
       <input id="flattenToggle" type="checkbox" checked />
-      <span>导出时定稿（flatten，推荐打印用）</span>
+      <span>导出时定稿（flatten）</span>
     </label>
 
     <button id="exportBtn" class="btn">生成 PDF</button>
@@ -94,10 +72,8 @@
 
   <div id="stage">
     <canvas id="pdfCanvas"></canvas>
-    <!-- PDF.js 会在这里渲染“真正的表单字段层” -->
-    <div id="annotationLayer"></div>
+    <div id="annHost"></div>
 
-    <!-- 手写签名覆盖层（覆盖在 PDF 的签名字段位置上） -->
     <div id="sigWrap">
       <canvas id="sigCanvas"></canvas>
     </div>
@@ -105,31 +81,20 @@
 
   <div class="row" style="margin-top:10px">
     <button id="sigClear" class="btn warn" disabled>清空手写签名</button>
-    <span class="muted">手机端建议：生成后点“打开预览”，再用系统分享/存储/打印。</span>
+    <span class="muted">如果按钮无反应：请强制刷新（Ctrl+Shift+R）避免 GitHub Pages 缓存旧代码。</span>
   </div>
 
-  <div class="muted">
-    提示：如果你想让手写签名准确落在 PDF 上，请确保你的表单里存在一个签名字段，字段名与下面配置一致（默认：Signature）。
-  </div>
+  <script type="module">
+    import * as pdfjsLib from './pdf.mjs';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.mjs';
 
-  <script>
-    /***********************
-     * 配置：你的字段名（按你在 PDF 里设置的 Name 填）
-     ***********************/
     const CONFIG = {
       templatePdf: 'consent_form.pdf',
-
-      // 你在 PDF 中的“签名字段名”（建议你在 LibreOffice 里给签名框的 Name 设为 Signature）
-      signatureFieldName: 'Signature',
-
-      // 如果你还有“打印名/日期”字段，这里填字段名（可选）
-      printNameFieldName: 'Print Name',
-      dateFieldName: 'Date',
+      signatureFieldName: 'Signature',  // ← 改成你 PDF 里真实的 Name
+      printNameFieldName: 'Print Name', // 可选
+      dateFieldName: 'Date',            // 可选
     };
 
-    /***********************
-     * 状态
-     ***********************/
     let originalPdfBytes = null;
     let pdfDocProxy = null;
     let pageProxy = null;
@@ -138,11 +103,10 @@
 
     let generatedBlobUrl = null;
 
-    // signature pad
     let sigPad = null;
 
     const pdfCanvas = document.getElementById('pdfCanvas');
-    const annHost = document.getElementById('annotationLayer');
+    const annHost = document.getElementById('annHost');
     const statusEl = document.getElementById('status');
 
     const sigWrap = document.getElementById('sigWrap');
@@ -153,10 +117,7 @@
     const openBtn = document.getElementById('openBtn');
     const downloadBtn = document.getElementById('downloadBtn');
 
-    // CSS.escape 兼容（极少数浏览器）
-    const cssEscape = window.CSS && CSS.escape ? CSS.escape : (s)=>String(s).replace(/["\\]/g, '\\$&');
-
-    function setStatus(text){ statusEl.textContent = text; }
+    function setStatus(t){ statusEl.textContent = t; }
 
     function revokeBlobUrl(){
       if (generatedBlobUrl){
@@ -175,18 +136,15 @@
       downloadBtn.disabled = false;
     }
 
-    /***********************
-     * 加载 PDF
-     ***********************/
-    document.getElementById('loadTpl').onclick = async ()=>{
+    document.getElementById('loadTpl').addEventListener('click', async ()=>{
       const res = await fetch(CONFIG.templatePdf);
       if (!res.ok){
-        alert(`找不到 ${CONFIG.templatePdf}，请确认它在仓库根目录，且大小写完全一致。`);
+        alert(`找不到 ${CONFIG.templatePdf}（请确认在仓库根目录且大小写一致）`);
         return;
       }
       originalPdfBytes = await res.arrayBuffer();
       await renderPreview(originalPdfBytes);
-    };
+    });
 
     document.getElementById('uploadPdf').addEventListener('change', async (e)=>{
       const file = e.target.files?.[0];
@@ -195,17 +153,13 @@
       await renderPreview(originalPdfBytes);
     });
 
-    /***********************
-     * 渲染：PDF 页面 + 表单字段（Annotation Layer）
-     ***********************/
     async function renderPreview(bytes){
       setStatus('加载中...');
       revokeBlobUrl();
 
-      // annotationMode 兼容不同 pdf.js 版本
       const docParams = { data: bytes };
-      if (window.pdfjsLib.AnnotationMode && window.pdfjsLib.AnnotationMode.ENABLE_FORMS !== undefined){
-        docParams.annotationMode = window.pdfjsLib.AnnotationMode.ENABLE_FORMS;
+      if (pdfjsLib.AnnotationMode?.ENABLE_FORMS !== undefined){
+        docParams.annotationMode = pdfjsLib.AnnotationMode.ENABLE_FORMS;
       }
 
       const loadingTask = pdfjsLib.getDocument(docParams);
@@ -214,28 +168,27 @@
       pageProxy = await pdfDocProxy.getPage(1);
       viewport = pageProxy.getViewport({ scale });
 
-      // canvas 尺寸
       const ctx = pdfCanvas.getContext('2d');
       pdfCanvas.width = viewport.width;
       pdfCanvas.height = viewport.height;
 
-      // annotation host 尺寸（注意 stage 有 padding 8px，所以这里也在 padding 内）
       annHost.style.width = viewport.width + 'px';
       annHost.style.height = viewport.height + 'px';
       annHost.innerHTML = '';
 
-      // 1) 渲染页面
       const renderParams = { canvasContext: ctx, viewport };
-      if (window.pdfjsLib.AnnotationMode && window.pdfjsLib.AnnotationMode.ENABLE_FORMS !== undefined){
-        renderParams.annotationMode = window.pdfjsLib.AnnotationMode.ENABLE_FORMS;
+      if (pdfjsLib.AnnotationMode?.ENABLE_FORMS !== undefined){
+        renderParams.annotationMode = pdfjsLib.AnnotationMode.ENABLE_FORMS;
       }
       await pageProxy.render(renderParams).promise;
 
-      // 2) 渲染表单字段层
       await renderAnnotationLayer();
-
-      // 3) 将手写签名板“贴”到签名字段位置（如果存在）
       setupSignatureOverlay();
+
+      // ✅ 调试：打印页面上出现的字段 name（你能用这个核对字段名）
+      console.log('PDF.js 渲染出的表单元素：',
+        [...annHost.querySelectorAll('input,textarea,select')].map(e=>({name:e.name, id:e.id, type:e.type, tag:e.tagName}))
+      );
 
       setStatus('已加载（可填写）');
     }
@@ -243,54 +196,37 @@
     async function renderAnnotationLayer(){
       const annotations = await pageProxy.getAnnotations({ intent: 'display' });
 
-      // pdf.js 不同版本接口略有差异，这里做兼容
-      const div = document.createElement('div');
-      div.className = 'annotationLayer';
-      annHost.appendChild(div);
+      const layerDiv = document.createElement('div');
+      layerDiv.className = 'annotationLayer';
+      annHost.appendChild(layerDiv);
 
-      if (pdfjsLib.AnnotationLayer && typeof pdfjsLib.AnnotationLayer.render === 'function'){
-        pdfjsLib.AnnotationLayer.render({
-          viewport: viewport.clone({ dontFlip: true }),
-          div,
-          annotations,
-          page: pageProxy,
-          renderForms: true,
-        });
-      } else {
-        // 如果你的 pdf.mjs 版本太旧，这里可能进来
-        console.warn('当前 pdf.js 版本缺少 AnnotationLayer.render，建议更新 pdf.mjs/pdf.worker.mjs 为较新版本。');
-        alert('你的 PDF.js 版本可能不支持表单渲染（AnnotationLayer）。请更新 pdf.mjs/pdf.worker.mjs。');
+      if (!pdfjsLib.AnnotationLayer?.render){
+        alert('你的 pdf.mjs 版本可能不支持表单渲染（AnnotationLayer.render 不存在）。请换更新的 pdf.mjs / pdf.worker.mjs。');
+        return;
       }
+
+      pdfjsLib.AnnotationLayer.render({
+        viewport: viewport.clone({ dontFlip: true }),
+        div: layerDiv,
+        annotations,
+        page: pageProxy,
+        renderForms: true,
+      });
     }
 
-    /***********************
-     * 找到 PDF 表单字段对应的 DOM 元素
-     ***********************/
-    function findFieldElementByName(fieldName){
-      if (!fieldName) return null;
-      // 常见：元素会带 name=""
-      const sel = `#annotationLayer .annotationLayer [name="${cssEscape(fieldName)}"]`;
-      const el = document.querySelector(sel);
-      return el || null;
+    function findFieldElByName(name){
+      if (!name) return null;
+      return annHost.querySelector(`[name="${CSS.escape(name)}"]`);
     }
 
-    /***********************
-     * 手写签名：覆盖在签名字段上
-     ***********************/
     function setupSignatureOverlay(){
-      // 清理旧签名板
       sigWrap.style.display = 'none';
       sigClearBtn.disabled = true;
       sigPad = null;
 
-      const target = findFieldElementByName(CONFIG.signatureFieldName);
-      if (!target){
-        // 如果你还没创建 Signature 字段，会进这里
-        console.warn('未找到签名字段：', CONFIG.signatureFieldName);
-        return;
-      }
+      const target = findFieldElByName(CONFIG.signatureFieldName);
+      if (!target) return;
 
-      // 计算 target 在 stage 内的位置
       const stageRect = document.getElementById('stage').getBoundingClientRect();
       const rect = target.getBoundingClientRect();
 
@@ -299,24 +235,22 @@
       const width = rect.width;
       const height = rect.height;
 
-      // 隐藏原本的签名字段（避免用户在里面输入文字）
+      // 隐藏原字段
       target.style.opacity = '0';
       target.style.pointerEvents = 'none';
 
-      // 放置签名板
       sigWrap.style.display = 'block';
       sigWrap.style.left = left + 'px';
       sigWrap.style.top = top + 'px';
 
-      // 高 DPI 处理（手机更清晰）
       const ratio = Math.max(1, Math.floor(window.devicePixelRatio || 1));
       sigCanvas.style.width = Math.max(60, width) + 'px';
       sigCanvas.style.height = Math.max(30, height) + 'px';
       sigCanvas.width = Math.max(60, Math.floor(width)) * ratio;
       sigCanvas.height = Math.max(30, Math.floor(height)) * ratio;
 
-      const ctx = sigCanvas.getContext('2d');
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const c = sigCanvas.getContext('2d');
+      c.setTransform(ratio, 0, 0, ratio, 0, 0);
 
       sigPad = new SignaturePad(sigCanvas, { backgroundColor: 'rgba(255,255,255,0)' });
       sigClearBtn.disabled = false;
@@ -326,43 +260,23 @@
       if (sigPad) sigPad.clear();
     });
 
-    /***********************
-     * 读取页面上所有表单控件的值（由 PDF.js 渲染出来的）
-     ***********************/
-    function collectFormValuesFromDom(){
-      const root = document.querySelector('#annotationLayer .annotationLayer');
-      if (!root) return [];
-
-      const els = root.querySelectorAll('input, textarea, select');
+    function collectDomValues(){
+      const els = annHost.querySelectorAll('input,textarea,select');
       const out = [];
-
       els.forEach(el=>{
-        const name = el.getAttribute('name') || el.name || '';
+        const name = el.name || el.getAttribute('name') || '';
         if (!name) return;
-
         const tag = el.tagName.toLowerCase();
         const type = (el.getAttribute('type') || '').toLowerCase();
-
         if (tag === 'input' && type === 'checkbox'){
           out.push({ name, kind:'checkbox', value: !!el.checked });
-          return;
-        }
-
-        if (tag === 'select'){
+        } else {
           out.push({ name, kind:'text', value: el.value || '' });
-          return;
         }
-
-        // 其他一律当文本
-        out.push({ name, kind:'text', value: el.value || '' });
       });
-
       return out;
     }
 
-    /***********************
-     * 导出：用 pdf-lib 写回表单字段 + 嵌入手写签名 + 可选 flatten
-     ***********************/
     exportBtn.addEventListener('click', async ()=>{
       if (!originalPdfBytes){
         alert('请先加载模板或上传 PDF。');
@@ -375,70 +289,51 @@
       const pdfDoc = await PDFLib.PDFDocument.load(originalPdfBytes);
       const form = pdfDoc.getForm();
 
-      // 1) 把 DOM 上的字段值写回 PDF 表单字段（字段名就是你在 PDF 里设置的 Name，比如 "First Name" / "Yes"）
-      const values = collectFormValuesFromDom();
+      const values = collectDomValues();
+
+      // ✅ 先把 DOM 的值写回表单字段
       for (const item of values){
-        try {
+        try{
           if (item.kind === 'checkbox'){
-            // 先按 checkbox 尝试
             const cb = form.getCheckBox(item.name);
-            if (item.value) cb.check();
-            else cb.uncheck();
+            item.value ? cb.check() : cb.uncheck();
           } else {
             const tf = form.getTextField(item.name);
             tf.setText(String(item.value ?? ''));
           }
-        } catch (e) {
-          // 可能是：字段类型不是 text/checkbox（例如 radio），或者字段名不一致
-          // 尝试 radio group（可选）
-          try {
-            if (item.kind === 'checkbox' && item.value === true){
-              const rg = form.getRadioGroup(item.name);
-              rg.select(item.name);
-            }
-          } catch (_) {}
-          console.warn('写入字段失败（可能类型不匹配或字段名不一致）：', item.name, e);
+        } catch(e){
+          console.warn('写入字段失败：', item.name, e);
         }
       }
 
-      // 2) 嵌入手写签名：把签名 PNG 画到签名字段的矩形区域
+      // ✅ 嵌入手写签名（按字段 widget 的矩形）
       if (sigPad && !sigPad.isEmpty()){
-        try {
+        try{
           const pngDataUrl = sigPad.toDataURL('image/png');
           const png = await pdfDoc.embedPng(pngDataUrl);
 
-          // 找到签名字段的 widget 矩形
           const field = form.getField(CONFIG.signatureFieldName);
           const widgets = field.acroField.getWidgets();
-          if (widgets.length > 0){
-            const widget = widgets[0];
-            const rect = widget.getRectangle(); // { x, y, width, height }
-            const page = widget.getPage();
-
-            page.drawImage(png, {
-              x: rect.x,
-              y: rect.y,
-              width: rect.width,
-              height: rect.height,
-            });
+          if (widgets.length){
+            const w = widgets[0];
+            const rect = w.getRectangle();
+            const page = w.getPage();
+            page.drawImage(png, { x: rect.x, y: rect.y, width: rect.width, height: rect.height });
           }
-        } catch (e) {
-          console.warn('嵌入手写签名失败：', e);
+        } catch(e){
+          console.warn('签名嵌入失败：', e);
         }
       }
 
-      // 3) 可选：定稿（flatten）—— 打印/提交最推荐
-      const doFlatten = document.getElementById('flattenToggle').checked;
-      if (doFlatten){
-        try { form.flatten(); } catch (e) { console.warn('flatten 失败：', e); }
+      // ✅ 定稿
+      if (document.getElementById('flattenToggle').checked){
+        try{ form.flatten(); } catch(e){ console.warn('flatten 失败：', e); }
       }
 
       const outBytes = await pdfDoc.save();
-      const blob = new Blob([outBytes], { type:'application/pdf' });
-      setGenerated(blob);
-
+      setGenerated(new Blob([outBytes], { type:'application/pdf' }));
       setStatus('已生成');
-      alert('已生成 PDF。手机端建议点“打开预览”后再分享/打印。');
+      alert('已生成 PDF。');
     });
 
     openBtn.addEventListener('click', ()=>{
@@ -456,20 +351,18 @@
       a.remove();
     });
 
-    // 页面加载自动尝试加载模板
-    (async ()=>{
-      try {
-        const r = await fetch(CONFIG.templatePdf);
-        if (r.ok){
-          originalPdfBytes = await r.arrayBuffer();
-          await renderPreview(originalPdfBytes);
-        } else {
-          setStatus('未找到模板');
-        }
-      } catch (e) {
-        setStatus('未加载');
+    // 自动加载模板（如果存在）
+    try{
+      const r = await fetch(CONFIG.templatePdf);
+      if (r.ok){
+        originalPdfBytes = await r.arrayBuffer();
+        await renderPreview(originalPdfBytes);
+      } else {
+        setStatus('未找到模板');
       }
-    })();
+    } catch {
+      setStatus('未加载');
+    }
   </script>
 </body>
 </html>
