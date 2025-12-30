@@ -3,86 +3,134 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>PDF 表单填写（A 路线）</title>
-
-  <!-- ✅ 你的文件名是 web/viewer.css -->
-  <link rel="stylesheet" href="./web/viewer.css">
+  <title>PDF 覆盖层填写（路线B）</title>
 
   <style>
-    body {
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", Arial;
-      margin: 16px;
-    }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", Arial; margin: 16px; }
     h1 { font-size: 18px; margin: 0 0 10px; }
-
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
-    .btn { border:0; border-radius:10px; padding:10px 12px; cursor:pointer; background:#2563eb; color:white; font-weight:600; }
+    .btn { border:0; border-radius:10px; padding:10px 12px; cursor:pointer; background:#2563eb; color:white; font-weight:700; }
     .btn.secondary { background:#e5e7eb; color:#111827; }
     .btn.warn { background:#ef4444; }
     .badge { padding:4px 8px; border-radius:999px; background:#111827; color:white; font-size:12px; }
     .muted { color:#6b7280; font-size:12px; }
-    .panel {
-      border: 1px solid #e5e7eb; border-radius: 12px;
-      padding: 10px; margin-top: 10px;
-    }
-    #errorBox { white-space: pre-wrap; color:#b91c1c; display:none; }
-    #okBox { white-space: pre-wrap; color:#065f46; display:none; }
+    .panel { border:1px solid #e5e7eb; border-radius:12px; padding:10px; margin-top:10px; }
+    #log { white-space: pre-wrap; font-size:12px; color:#374151; }
 
     #stage {
       position: relative;
-      display: inline-block;
+      display:inline-block;
       border: 1px solid #e5e7eb;
       border-radius: 12px;
       padding: 8px;
       background: white;
+      user-select: none;
       max-width: 100%;
     }
-    #pdfCanvas { display:block; border-radius: 8px; max-width: 100%; height:auto; }
-    #annHost {
+    #pdfCanvas { display:block; border-radius: 8px; max-width:100%; height:auto; }
+
+    /* 覆盖层容器：与 canvas 同尺寸 */
+    #overlay {
       position:absolute;
       left:8px; top:8px;
       width:0; height:0;
+      pointer-events: none; /* 默认不阻挡拖拽框；控件本身会 pointer-events:auto */
     }
 
-    /* 让字段看起来像“写在 PDF 上” */
-    #annHost .annotationLayer input,
-    #annHost .annotationLayer textarea,
-    #annHost .annotationLayer select {
-      background: transparent !important;
-      border: none !important;
-      outline: none !important;
-      box-shadow: none !important;
-      padding: 0 !important;
-      margin: 0 !important;
+    /* 字段容器（可拖拽/调整） */
+    .field-box {
+      position:absolute;
+      border: 1px dashed rgba(59,130,246,0.9);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.75);
+      pointer-events: auto;
+      box-sizing: border-box;
+    }
+    .field-box.selected { outline: 2px solid rgba(37,99,235,0.9); }
+
+    .field-toolbar {
+      position:absolute;
+      left:0; top:-26px;
+      display:flex; gap:6px; align-items:center;
+      background: rgba(17,24,39,0.92);
+      color:white;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 11px;
+    }
+    .field-toolbar button {
+      border:0; border-radius:999px; padding:2px 6px;
+      cursor:pointer; background: rgba(255,255,255,0.15); color:white;
+    }
+
+    .resize-handle {
+      position:absolute;
+      width:10px; height:10px;
+      right:-5px; bottom:-5px;
+      border-radius: 999px;
+      background: rgba(37,99,235,1);
+      cursor: nwse-resize;
+    }
+
+    .field-input, .field-textarea {
+      width:100%; height:100%;
+      border:0; outline:none;
+      background: transparent;
       font-size: 14px;
+      padding: 4px 6px;
+      box-sizing: border-box;
     }
-    #annHost .annotationLayer input:focus,
-    #annHost .annotationLayer textarea:focus,
-    #annHost .annotationLayer select:focus {
-      outline: 1px dashed #60a5fa !important;
-      border-radius: 4px;
+    .field-checkbox {
+      display:flex; align-items:center; justify-content:center;
+      width:100%; height:100%;
+      font-size: 18px;
+      cursor: pointer;
     }
 
-    /* 手写签名覆盖层 */
-    #sigWrap { position:absolute; display:none; z-index: 20; }
-    #sigCanvas {
-      border: 1px dashed #9ca3af;
+    /* 校准模式：画一个橙色选框 */
+    #selectRect {
+      position:absolute;
+      border: 2px solid rgba(249,115,22,0.95);
+      background: rgba(249,115,22,0.10);
       border-radius: 10px;
-      background: rgba(255,255,255,0.90);
+      display:none;
+      pointer-events:none;
+    }
+
+    /* 签名板弹窗 */
+    #sigModal {
+      position:fixed; inset:0;
+      background: rgba(0,0,0,0.45);
+      display:none; align-items:center; justify-content:center;
+      padding: 16px;
+      z-index: 999;
+    }
+    #sigCard {
+      background:white;
+      border-radius: 14px;
+      width:min(680px, 96vw);
+      padding: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    #sigCanvas {
+      width:100%;
+      height:220px;
+      border: 1px dashed #9ca3af;
+      border-radius: 12px;
+      background: rgba(255,255,255,1);
       touch-action: none;
     }
   </style>
 
-  <!-- pdf-lib + signature pad -->
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 </head>
 
 <body>
-  <h1>PDF 表单填写（点哪填哪 / 勾选 / 签名 / 导出）</h1>
+  <h1>PDF 覆盖层填写（路线 B：自定义字段位置 + 导出 PDF）</h1>
 
   <div class="row">
-    <button id="loadTpl" class="btn secondary">加载模板（consent_form.pdf）</button>
+    <button id="loadTpl" class="btn secondary">加载默认模板</button>
 
     <label class="row">
       <span class="btn secondary">或上传 PDF</span>
@@ -90,82 +138,93 @@
     </label>
 
     <label class="row" style="gap:6px">
-      <input id="flattenToggle" type="checkbox" checked />
-      <span>导出时定稿（flatten，推荐打印）</span>
+      <input id="calibToggle" type="checkbox">
+      <span>校准模式（拖拽放置字段）</span>
     </label>
 
-    <button id="exportBtn" class="btn">生成 PDF</button>
+    <select id="fieldType" class="btn secondary" style="font-weight:700">
+      <option value="text">文本框</option>
+      <option value="textarea">多行文本</option>
+      <option value="checkbox">勾选框</option>
+      <option value="date">日期（自动）</option>
+      <option value="printname">打印签名（文字）</option>
+      <option value="signature">手写签名</option>
+    </select>
+
+    <button id="clearFields" class="btn warn">清空字段</button>
+
+    <label class="row" style="gap:6px">
+      <input id="flattenToggle" type="checkbox" checked>
+      <span>导出时定稿（flatten）</span>
+    </label>
+
+    <button id="exportBtn" class="btn">导出 PDF</button>
     <button id="openBtn" class="btn secondary" disabled>打开预览</button>
-    <button id="downloadBtn" class="btn secondary" disabled>下载 PDF</button>
+    <button id="downloadBtn" class="btn secondary" disabled>下载</button>
 
     <span class="badge" id="status">未加载</span>
   </div>
 
   <div id="stage">
     <canvas id="pdfCanvas"></canvas>
-    <div id="annHost"></div>
-
-    <div id="sigWrap">
-      <canvas id="sigCanvas"></canvas>
-    </div>
-  </div>
-
-  <div class="row" style="margin-top:10px">
-    <button id="sigClear" class="btn warn" disabled>清空手写签名</button>
-    <span class="muted">更新后请强制刷新：Ctrl + Shift + R（GitHub Pages 常缓存旧文件）</span>
+    <div id="overlay"></div>
+    <div id="selectRect"></div>
   </div>
 
   <div class="panel">
-    <div class="muted">调试信息（如果加载失败，这里会显示原因）：</div>
-    <div id="errorBox"></div>
-    <div id="okBox"></div>
+    <div class="muted">提示：</div>
+    <div class="muted">1) 勾上“校准模式”，在 PDF 上拖一个框 → 会创建你选择的字段类型。</div>
+    <div class="muted">2) 字段可拖动、右下角可缩放；点字段上方的小工具条可复制/删除。</div>
+    <div class="muted">3) 导出会把“文本/勾/签名”画回 PDF（打印/提交最稳）。</div>
+    <div id="log"></div>
+  </div>
+
+  <!-- 签名弹窗 -->
+  <div id="sigModal">
+    <div id="sigCard">
+      <div class="row" style="justify-content:space-between; margin-bottom:8px">
+        <div style="font-weight:800">手写签名</div>
+        <button id="sigClose" class="btn secondary">关闭</button>
+      </div>
+      <canvas id="sigCanvas"></canvas>
+      <div class="row" style="margin-top:10px">
+        <button id="sigClear" class="btn warn">清空</button>
+        <button id="sigSave" class="btn">保存签名</button>
+        <span class="muted">（手机可直接手写）</span>
+      </div>
+    </div>
   </div>
 
   <script type="module">
-    /**************************************************************
-     * ✅ 重要：按你现在结构加载
-     *   build/pdf.mjs
-     *   build/pdf.worker.mjs
-     *   web/viewer.mjs
-     *   web/viewer.css
-     **************************************************************/
     import * as pdfjsLib from './build/pdf.mjs';
-    import { AnnotationLayer } from './web/viewer.mjs';
-
-    // worker 路径
     pdfjsLib.GlobalWorkerOptions.workerSrc = './build/pdf.worker.mjs';
 
-    /**************************************************************
-     * 你需要确认的配置（只改这里即可）
-     **************************************************************/
-    const CONFIG = {
-      templatePdf: 'consent_form.pdf',
+    /************ 你要改默认模板文件名就改这里 ************/
+    const TEMPLATE_PDF = 'consent_form.pdf'; // 或 'Chic form.pdf'
+    const STORAGE_KEY = 'overlay_fields_v1_' + TEMPLATE_PDF;
 
-      // ⚠️ 这里必须和你在 LibreOffice 里“控件属性 → 名称（Name）”完全一致
-      // 如果你没有创建签名字段，或者名字不是 Signature，就改成你的真实字段名
-      signatureFieldName: 'Signature',
-    };
-
-    /**************************************************************
-     * DOM
-     **************************************************************/
     const pdfCanvas = document.getElementById('pdfCanvas');
-    const annHost = document.getElementById('annHost');
+    const overlay = document.getElementById('overlay');
+    const selectRect = document.getElementById('selectRect');
     const statusEl = document.getElementById('status');
-    const errorBox = document.getElementById('errorBox');
-    const okBox = document.getElementById('okBox');
+    const logEl = document.getElementById('log');
 
-    const sigWrap = document.getElementById('sigWrap');
-    const sigCanvas = document.getElementById('sigCanvas');
-    const sigClearBtn = document.getElementById('sigClear');
+    const calibToggle = document.getElementById('calibToggle');
+    const fieldTypeSel = document.getElementById('fieldType');
 
     const exportBtn = document.getElementById('exportBtn');
     const openBtn = document.getElementById('openBtn');
     const downloadBtn = document.getElementById('downloadBtn');
 
-    /**************************************************************
-     * 状态
-     **************************************************************/
+    const sigModal = document.getElementById('sigModal');
+    const sigCanvas = document.getElementById('sigCanvas');
+    const sigClose = document.getElementById('sigClose');
+    const sigClear = document.getElementById('sigClear');
+    const sigSave = document.getElementById('sigSave');
+
+    let signaturePad = null;
+    let editingSigFieldId = null;
+
     let originalPdfBytes = null;
     let pdfDocProxy = null;
     let pageProxy = null;
@@ -173,23 +232,15 @@
     const scale = 1.5;
 
     let generatedBlobUrl = null;
-    let sigPad = null;
+
+    // 字段数据：x,y,w,h 都是 “相对于 viewport 的像素坐标”
+    /** field:
+     * { id, type, x, y, w, h, value, checked, sigDataUrl }
+     */
+    let fields = [];
 
     function setStatus(t){ statusEl.textContent = t; }
-
-    function showError(msg){
-      errorBox.style.display = 'block';
-      okBox.style.display = 'none';
-      errorBox.textContent = msg;
-      console.error(msg);
-    }
-
-    function showOk(msg){
-      okBox.style.display = 'block';
-      errorBox.style.display = 'none';
-      okBox.textContent = msg;
-      console.log(msg);
-    }
+    function log(t){ logEl.textContent = String(t ?? ''); }
 
     function revokeBlobUrl(){
       if (generatedBlobUrl){
@@ -199,7 +250,6 @@
       openBtn.disabled = true;
       downloadBtn.disabled = true;
     }
-
     function setGenerated(blob){
       revokeBlobUrl();
       if (!blob) return;
@@ -208,285 +258,63 @@
       downloadBtn.disabled = false;
     }
 
-    /**************************************************************
-     * 文件存在性自检（避免“啥也不显示”）
-     **************************************************************/
-    async function checkAssets(){
-      const checks = [
-        './build/pdf.mjs',
-        './build/pdf.worker.mjs',
-        './web/viewer.mjs',
-        './web/viewer.css',
-        './' + CONFIG.templatePdf,
-      ];
-      const results = [];
-      for (const p of checks){
-        try{
-          const r = await fetch(p, { cache: 'no-store' });
-          results.push(`${r.ok ? '✅' : '❌'} ${p} ${r.ok ? '' : '(HTTP ' + r.status + ')'}`);
-        } catch(e){
-          results.push(`❌ ${p} (fetch error)`);
-        }
-      }
-      showOk('资源检查：\n' + results.join('\n'));
-      const anyFail = results.some(x => x.startsWith('❌'));
-      if (anyFail){
-        showError('有资源 404/失败，PDF 一定加载不出。请按“资源检查”里标 ❌ 的路径去对照你的仓库文件名/路径。');
+    function saveFields(){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fields));
+    }
+    function loadFields(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        fields = raw ? JSON.parse(raw) : [];
+      } catch {
+        fields = [];
       }
     }
 
-    /**************************************************************
-     * 加载 PDF
-     **************************************************************/
-    document.getElementById('loadTpl').addEventListener('click', async ()=>{
-      try{
-        const res = await fetch(CONFIG.templatePdf, { cache: 'no-store' });
-        if (!res.ok) return showError(`找不到模板 ${CONFIG.templatePdf}（HTTP ${res.status}）。请确认在仓库根目录且大小写一致。`);
-        originalPdfBytes = await res.arrayBuffer();
-        await renderPreview(originalPdfBytes);
-      } catch(e){
-        showError('加载模板失败：' + (e?.message || e));
-      }
-    });
+    function pxToPdf(pt){ /* viewport px -> PDF point */
+      // viewport = scale * pdf points（简单线性换算）
+      return pt / scale;
+    }
 
+    function nowDateStr(){
+      const d = new Date();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      const yyyy = d.getFullYear();
+      return `${mm}/${dd}/${yyyy}`;
+    }
+
+    async function loadTemplate(){
+      setStatus('加载模板中...');
+      revokeBlobUrl();
+      const res = await fetch(TEMPLATE_PDF, { cache:'no-store' });
+      if (!res.ok){
+        setStatus('模板加载失败');
+        log(`❌ 找不到 ${TEMPLATE_PDF}（HTTP ${res.status}）。确认文件在仓库根目录且大小写一致。`);
+        return;
+      }
+      originalPdfBytes = await res.arrayBuffer();
+      await renderPdf(originalPdfBytes);
+    }
+
+    document.getElementById('loadTpl').addEventListener('click', loadTemplate);
     document.getElementById('uploadPdf').addEventListener('change', async (e)=>{
-      try{
-        const file = e.target.files?.[0];
-        if (!file) return;
-        originalPdfBytes = await file.arrayBuffer();
-        await renderPreview(originalPdfBytes);
-      } catch(err){
-        showError('上传 PDF 读取失败：' + (err?.message || err));
-      }
-    });
-
-    /**************************************************************
-     * 渲染：页面 + 表单层
-     **************************************************************/
-    async function renderPreview(bytes){
-      setStatus('加载中...');
+      const f = e.target.files?.[0];
+      if (!f) return;
+      TEMPLATE_PDF; // 仅为了不报未用
+      setStatus('读取上传 PDF...');
       revokeBlobUrl();
-
-      // 清空旧 UI
-      annHost.innerHTML = '';
-      sigWrap.style.display = 'none';
-      sigClearBtn.disabled = true;
-      sigPad = null;
-
-      try{
-        const docParams = { data: bytes };
-        if (pdfjsLib.AnnotationMode?.ENABLE_FORMS !== undefined){
-          docParams.annotationMode = pdfjsLib.AnnotationMode.ENABLE_FORMS;
-        }
-
-        const loadingTask = pdfjsLib.getDocument(docParams);
-        pdfDocProxy = await loadingTask.promise;
-
-        pageProxy = await pdfDocProxy.getPage(1);
-        viewport = pageProxy.getViewport({ scale });
-
-        const ctx = pdfCanvas.getContext('2d');
-        pdfCanvas.width = viewport.width;
-        pdfCanvas.height = viewport.height;
-
-        annHost.style.width = viewport.width + 'px';
-        annHost.style.height = viewport.height + 'px';
-        annHost.innerHTML = '';
-
-        const renderParams = { canvasContext: ctx, viewport };
-        if (pdfjsLib.AnnotationMode?.ENABLE_FORMS !== undefined){
-          renderParams.annotationMode = pdfjsLib.AnnotationMode.ENABLE_FORMS;
-        }
-        await pageProxy.render(renderParams).promise;
-
-        await renderAnnotationLayer();
-
-        // 检查是否渲染出任何表单控件
-        const fields = annHost.querySelectorAll('input, textarea, select');
-        console.log('DOM 字段列表：', [...fields].map(x => ({ name: x.name, type: x.type, tag: x.tagName })));
-        if (fields.length === 0){
-          showError(
-            'PDF 已显示，但没有渲染出任何表单字段。\n' +
-            '请确认你导出 PDF 时勾选了「创建 PDF 表单」，并且这些输入框/复选框确实是表单控件。'
-          );
-        } else {
-          showOk(`✅ 已渲染表单字段数量：${fields.length}\n（字段名请看 Console 输出，用于核对 “First Name / Yes” 等）`);
-        }
-
-        setupSignatureOverlay(); // 如果找不到签名字段，会自动跳过
-        setStatus('已加载（可填写）');
-      } catch(e){
-        showError('渲染失败：' + (e?.message || e));
-        setStatus('加载失败');
-      }
-    }
-
-    async function renderAnnotationLayer(){
-      const annotations = await pageProxy.getAnnotations({ intent: 'display' });
-
-      const layerDiv = document.createElement('div');
-      layerDiv.className = 'annotationLayer';
-      annHost.appendChild(layerDiv);
-
-      // viewer.mjs 导出的 AnnotationLayer
-      AnnotationLayer.render({
-        viewport: viewport.clone({ dontFlip: true }),
-        div: layerDiv,
-        annotations,
-        page: pageProxy,
-        renderForms: true,
-      });
-    }
-
-    /**************************************************************
-     * 签名覆盖层：贴到签名字段的位置
-     **************************************************************/
-    function findFieldElByName(name){
-      if (!name) return null;
-      return annHost.querySelector(`[name="${CSS.escape(name)}"]`);
-    }
-
-    function setupSignatureOverlay(){
-      sigWrap.style.display = 'none';
-      sigClearBtn.disabled = true;
-      sigPad = null;
-
-      const target = findFieldElByName(CONFIG.signatureFieldName);
-      if (!target){
-        // 没有签名字段不是致命错误，只是跳过签名
-        console.warn('未找到签名字段（DOM）：', CONFIG.signatureFieldName);
-        return;
-      }
-
-      const stageRect = document.getElementById('stage').getBoundingClientRect();
-      const rect = target.getBoundingClientRect();
-
-      const left = rect.left - stageRect.left;
-      const top = rect.top - stageRect.top;
-      const width = rect.width;
-      const height = rect.height;
-
-      // 隐藏原字段，避免输入文字
-      target.style.opacity = '0';
-      target.style.pointerEvents = 'none';
-
-      sigWrap.style.display = 'block';
-      sigWrap.style.left = left + 'px';
-      sigWrap.style.top = top + 'px';
-
-      const ratio = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-      sigCanvas.style.width = Math.max(80, width) + 'px';
-      sigCanvas.style.height = Math.max(40, height) + 'px';
-      sigCanvas.width = Math.max(80, Math.floor(width)) * ratio;
-      sigCanvas.height = Math.max(40, Math.floor(height)) * ratio;
-
-      const c = sigCanvas.getContext('2d');
-      c.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-      sigPad = new SignaturePad(sigCanvas, { backgroundColor: 'rgba(255,255,255,0)' });
-      sigClearBtn.disabled = false;
-    }
-
-    sigClearBtn.addEventListener('click', ()=>{
-      if (sigPad) sigPad.clear();
+      originalPdfBytes = await f.arrayBuffer();
+      await renderPdf(originalPdfBytes);
     });
 
-    /**************************************************************
-     * 采集 DOM 表单值 → 写回 PDF 表单字段
-     **************************************************************/
-    function collectDomValues(){
-      const els = annHost.querySelectorAll('input, textarea, select');
-      const out = [];
-      els.forEach(el=>{
-        const name = el.name || el.getAttribute('name') || '';
-        if (!name) return;
-
-        const tag = el.tagName.toLowerCase();
-        const type = (el.getAttribute('type') || '').toLowerCase();
-
-        if (tag === 'input' && type === 'checkbox'){
-          out.push({ name, kind:'checkbox', value: !!el.checked });
-        } else if (tag === 'input' && type === 'radio'){
-          if (el.checked) out.push({ name, kind:'radio', value: el.value || 'On' });
-        } else {
-          out.push({ name, kind:'text', value: el.value || '' });
-        }
-      });
-      return out;
-    }
-
-    exportBtn.addEventListener('click', async ()=>{
-      if (!originalPdfBytes){
-        alert('请先加载模板或上传 PDF。');
-        return;
-      }
-
-      setStatus('生成中...');
-      revokeBlobUrl();
-
-      try{
-        const pdfDoc = await PDFLib.PDFDocument.load(originalPdfBytes);
-        const form = pdfDoc.getForm();
-
-        // 1) 写回字段
-        const values = collectDomValues();
-        for (const item of values){
-          try{
-            if (item.kind === 'checkbox'){
-              const cb = form.getCheckBox(item.name);
-              item.value ? cb.check() : cb.uncheck();
-            } else if (item.kind === 'radio'){
-              const rg = form.getRadioGroup(item.name);
-              rg.select(item.value);
-            } else {
-              const tf = form.getTextField(item.name);
-              tf.setText(String(item.value ?? ''));
-            }
-          } catch(e){
-            console.warn('写入字段失败：', item.name, e);
-          }
-        }
-
-        // 2) 嵌入手写签名到签名字段矩形（如果存在）
-        if (sigPad && !sigPad.isEmpty()){
-          try{
-            const pngDataUrl = sigPad.toDataURL('image/png');
-            const png = await pdfDoc.embedPng(pngDataUrl);
-
-            const field = form.getField(CONFIG.signatureFieldName);
-            const widgets = field.acroField.getWidgets();
-            if (widgets.length){
-              const w = widgets[0];
-              const rect = w.getRectangle();
-              const page = w.getPage();
-              page.drawImage(png, { x: rect.x, y: rect.y, width: rect.width, height: rect.height });
-            }
-          } catch(e){
-            console.warn('签名嵌入失败（多半是签名字段名不对）：', e);
-          }
-        }
-
-        // 3) flatten（可选）
-        if (document.getElementById('flattenToggle').checked){
-          try{ form.flatten(); } catch(e){ console.warn('flatten 失败：', e); }
-        }
-
-        const outBytes = await pdfDoc.save();
-        setGenerated(new Blob([outBytes], { type:'application/pdf' }));
-
-        setStatus('已生成');
-        alert('已生成 PDF。手机端建议：点“打开预览”后再分享/打印。');
-      } catch(e){
-        showError('生成失败：' + (e?.message || e));
-        setStatus('生成失败');
-      }
+    document.getElementById('clearFields').addEventListener('click', ()=>{
+      fields = [];
+      overlay.innerHTML = '';
+      saveFields();
+      log('已清空字段。');
     });
 
-    openBtn.addEventListener('click', ()=>{
-      if (!generatedBlobUrl) return;
-      window.open(generatedBlobUrl, '_blank', 'noopener');
-    });
-
+    openBtn.addEventListener('click', ()=>{ if (generatedBlobUrl) window.open(generatedBlobUrl, '_blank', 'noopener'); });
     downloadBtn.addEventListener('click', ()=>{
       if (!generatedBlobUrl) return;
       const a = document.createElement('a');
@@ -497,24 +325,425 @@
       a.remove();
     });
 
-    /**************************************************************
-     * 页面启动：先做资源检查，再自动加载模板（如果存在）
-     **************************************************************/
-    await checkAssets();
+    // ====== 渲染 PDF + 覆盖层 ======
+    async function renderPdf(bytes){
+      setStatus('渲染中...');
+      log('');
 
-    try{
-      const r = await fetch(CONFIG.templatePdf, { cache: 'no-store' });
-      if (r.ok){
-        originalPdfBytes = await r.arrayBuffer();
-        await renderPreview(originalPdfBytes);
-      } else {
-        setStatus('未找到模板');
-        showError(`自动加载失败：找不到 ${CONFIG.templatePdf}（HTTP ${r.status}）`);
-      }
-    } catch(e){
-      setStatus('未加载');
-      showError('自动加载失败：' + (e?.message || e));
+      const loadingTask = pdfjsLib.getDocument({ data: bytes });
+      pdfDocProxy = await loadingTask.promise;
+
+      pageProxy = await pdfDocProxy.getPage(1);
+      viewport = pageProxy.getViewport({ scale });
+
+      const ctx = pdfCanvas.getContext('2d');
+      pdfCanvas.width = viewport.width;
+      pdfCanvas.height = viewport.height;
+
+      overlay.style.width = viewport.width + 'px';
+      overlay.style.height = viewport.height + 'px';
+
+      selectRect.style.width = viewport.width + 'px';
+      selectRect.style.height = viewport.height + 'px';
+
+      await pageProxy.render({ canvasContext: ctx, viewport }).promise;
+
+      loadFields();
+      rebuildOverlay();
+
+      setStatus('已加载');
+      log(`✅ PDF 已显示。字段数量：${fields.length}\n勾选“校准模式”开始拖拽放置字段。`);
     }
+
+    // ====== 覆盖层 UI：创建/拖拽/缩放 ======
+    function rebuildOverlay(){
+      overlay.innerHTML = '';
+      fields.forEach(f => overlay.appendChild(createFieldElement(f)));
+    }
+
+    function createFieldElement(field){
+      const box = document.createElement('div');
+      box.className = 'field-box';
+      box.dataset.id = field.id;
+      box.style.left = field.x + 'px';
+      box.style.top = field.y + 'px';
+      box.style.width = field.w + 'px';
+      box.style.height = field.h + 'px';
+
+      // toolbar
+      const tb = document.createElement('div');
+      tb.className = 'field-toolbar';
+      tb.innerHTML = `<span>${field.type}</span>`;
+      const btnDup = document.createElement('button'); btnDup.textContent = '复制';
+      const btnDel = document.createElement('button'); btnDel.textContent = '删除';
+      tb.appendChild(btnDup);
+      tb.appendChild(btnDel);
+      box.appendChild(tb);
+
+      btnDel.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        fields = fields.filter(x => x.id !== field.id);
+        saveFields();
+        rebuildOverlay();
+      });
+      btnDup.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const copy = structuredClone(field);
+        copy.id = 'f_' + Math.random().toString(16).slice(2);
+        copy.x += 8; copy.y += 8;
+        fields.push(copy);
+        saveFields();
+        rebuildOverlay();
+      });
+
+      // content
+      let content = null;
+
+      if (field.type === 'text' || field.type === 'date' || field.type === 'printname'){
+        const input = document.createElement('input');
+        input.className = 'field-input';
+        input.type = 'text';
+        input.value = field.type === 'date' ? (field.value || nowDateStr()) : (field.value || '');
+        input.placeholder = field.type === 'printname' ? '打印签名' : '';
+        content = input;
+
+        input.addEventListener('input', ()=>{
+          field.value = input.value;
+          saveFields();
+        });
+      } else if (field.type === 'textarea'){
+        const ta = document.createElement('textarea');
+        ta.className = 'field-textarea';
+        ta.value = field.value || '';
+        content = ta;
+        ta.addEventListener('input', ()=>{
+          field.value = ta.value;
+          saveFields();
+        });
+      } else if (field.type === 'checkbox'){
+        const chk = document.createElement('div');
+        chk.className = 'field-checkbox';
+        chk.textContent = field.checked ? '✓' : '';
+        content = chk;
+        chk.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          field.checked = !field.checked;
+          chk.textContent = field.checked ? '✓' : '';
+          saveFields();
+        });
+      } else if (field.type === 'signature'){
+        const sig = document.createElement('div');
+        sig.className = 'field-checkbox';
+        sig.style.fontSize = '12px';
+        sig.style.flexDirection = 'column';
+        sig.style.gap = '4px';
+        sig.style.padding = '4px';
+        sig.innerHTML = field.sigDataUrl
+          ? `<img src="${field.sigDataUrl}" style="max-width:100%; max-height:100%; object-fit:contain;" />`
+          : `<span class="muted">点击手写签名</span>`;
+        content = sig;
+
+        sig.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          openSignaturePad(field.id, field.sigDataUrl || null);
+        });
+      }
+
+      if (content){
+        content.style.pointerEvents = 'auto';
+        box.appendChild(content);
+      }
+
+      // resize handle
+      const handle = document.createElement('div');
+      handle.className = 'resize-handle';
+      box.appendChild(handle);
+
+      // dragging
+      let dragging = false;
+      let resizing = false;
+      let sx=0, sy=0, ox=0, oy=0, ow=0, oh=0;
+
+      function onDown(e){
+        if (calibToggle.checked) {
+          // 校准模式下：允许拖动/缩放
+        } else {
+          // 非校准模式下：避免误拖动，允许编辑内容
+          return;
+        }
+
+        const isHandle = e.target === handle;
+        dragging = !isHandle;
+        resizing = isHandle;
+
+        sx = e.clientX; sy = e.clientY;
+        ox = field.x; oy = field.y;
+        ow = field.w; oh = field.h;
+
+        box.classList.add('selected');
+        e.preventDefault();
+        e.stopPropagation();
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      }
+
+      function onMove(e){
+        const dx = e.clientX - sx;
+        const dy = e.clientY - sy;
+
+        if (dragging){
+          field.x = Math.max(0, ox + dx);
+          field.y = Math.max(0, oy + dy);
+          box.style.left = field.x + 'px';
+          box.style.top = field.y + 'px';
+        } else if (resizing){
+          field.w = Math.max(20, ow + dx);
+          field.h = Math.max(20, oh + dy);
+          box.style.width = field.w + 'px';
+          box.style.height = field.h + 'px';
+        }
+      }
+
+      function onUp(){
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        dragging = false; resizing = false;
+        saveFields();
+      }
+
+      box.addEventListener('mousedown', onDown);
+
+      return box;
+    }
+
+    // ====== 校准模式：拖拽创建字段 ======
+    let selecting = false;
+    let selStart = null;
+
+    document.getElementById('stage').addEventListener('mousedown', (e)=>{
+      if (!calibToggle.checked) return;
+
+      // 只在 overlay 空白处开始创建（避免点到字段）
+      const stageRect = document.getElementById('stage').getBoundingClientRect();
+      const ox = e.clientX - stageRect.left - 8; // 减 padding
+      const oy = e.clientY - stageRect.top - 8;
+
+      // 点击在 overlay 外忽略
+      if (ox < 0 || oy < 0 || ox > viewport.width || oy > viewport.height) return;
+      // 若点到已有字段，不走创建逻辑（让字段自己处理拖动）
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (el && el.closest && el.closest('.field-box')) return;
+
+      selecting = true;
+      selStart = { x: ox, y: oy };
+
+      selectRect.style.display = 'block';
+      selectRect.style.left = (selStart.x + 8) + 'px';
+      selectRect.style.top  = (selStart.y + 8) + 'px';
+      selectRect.style.width = '0px';
+      selectRect.style.height = '0px';
+
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e)=>{
+      if (!selecting) return;
+      const stageRect = document.getElementById('stage').getBoundingClientRect();
+      const x = e.clientX - stageRect.left - 8;
+      const y = e.clientY - stageRect.top - 8;
+
+      const x0 = Math.max(0, Math.min(selStart.x, x));
+      const y0 = Math.max(0, Math.min(selStart.y, y));
+      const x1 = Math.min(viewport.width, Math.max(selStart.x, x));
+      const y1 = Math.min(viewport.height, Math.max(selStart.y, y));
+
+      selectRect.style.left = (x0 + 8) + 'px';
+      selectRect.style.top  = (y0 + 8) + 'px';
+      selectRect.style.width = (x1 - x0) + 'px';
+      selectRect.style.height = (y1 - y0) + 'px';
+    });
+
+    document.addEventListener('mouseup', ()=>{
+      if (!selecting) return;
+      selecting = false;
+
+      const left = parseFloat(selectRect.style.left) - 8;
+      const top  = parseFloat(selectRect.style.top) - 8;
+      const w = parseFloat(selectRect.style.width);
+      const h = parseFloat(selectRect.style.height);
+
+      selectRect.style.display = 'none';
+
+      if (w < 8 || h < 8) return; // 太小忽略
+
+      const type = fieldTypeSel.value;
+      const id = 'f_' + Math.random().toString(16).slice(2);
+
+      const f = { id, type, x:left, y:top, w, h, value:'', checked:false, sigDataUrl:null };
+      if (type === 'date') f.value = nowDateStr();
+
+      fields.push(f);
+      saveFields();
+      rebuildOverlay();
+    });
+
+    // ====== 签名板 ======
+    function openSignaturePad(fieldId, existingDataUrl){
+      editingSigFieldId = fieldId;
+      sigModal.style.display = 'flex';
+
+      // 初始化 signature pad（考虑 DPR）
+      const rect = sigCanvas.getBoundingClientRect();
+      const ratio = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+      sigCanvas.width = Math.floor(rect.width * ratio);
+      sigCanvas.height = Math.floor(rect.height * ratio);
+      const ctx = sigCanvas.getContext('2d');
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      signaturePad = new SignaturePad(sigCanvas, { backgroundColor: 'rgba(255,255,255,1)' });
+
+      if (existingDataUrl){
+        // 载入已有签名
+        const img = new Image();
+        img.onload = ()=>{
+          ctx.drawImage(img, 0, 0, rect.width, rect.height);
+          signaturePad.fromDataURL(sigCanvas.toDataURL('image/png'));
+        };
+        img.src = existingDataUrl;
+      }
+    }
+
+    sigClose.addEventListener('click', ()=>{
+      sigModal.style.display = 'none';
+      editingSigFieldId = null;
+      signaturePad = null;
+    });
+    sigClear.addEventListener('click', ()=>{ if (signaturePad) signaturePad.clear(); });
+    sigSave.addEventListener('click', ()=>{
+      if (!signaturePad || !editingSigFieldId) return;
+      const f = fields.find(x => x.id === editingSigFieldId);
+      if (!f) return;
+
+      if (signaturePad.isEmpty()){
+        alert('签名为空。');
+        return;
+      }
+      f.sigDataUrl = signaturePad.toDataURL('image/png');
+      saveFields();
+      rebuildOverlay();
+      sigModal.style.display = 'none';
+      editingSigFieldId = null;
+      signaturePad = null;
+    });
+
+    // ====== 导出：把字段画回 PDF ======
+    exportBtn.addEventListener('click', async ()=>{
+      if (!originalPdfBytes){
+        alert('请先加载模板或上传 PDF。');
+        return;
+      }
+      setStatus('导出中...');
+      revokeBlobUrl();
+
+      try{
+        const pdfDoc = await PDFLib.PDFDocument.load(originalPdfBytes);
+        const page = pdfDoc.getPage(0);
+        const { width: pw, height: ph } = page.getSize();
+
+        // 我们的 overlay 坐标是 viewport px，转换到 PDF point：
+        // x_pdf = x_px / scale
+        // y_pdf = (viewportHeight - (y_px + h_px)) / scale   （因为 PDF 原点在左下）
+        const vH = viewport.height;
+
+        // 字体：用标准字体即可
+        const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+
+        // 先把签名图片 embed（如果有）
+        const sigCache = new Map(); // dataUrl -> embedPng
+        async function getPng(dataUrl){
+          if (sigCache.has(dataUrl)) return sigCache.get(dataUrl);
+          const png = await pdfDoc.embedPng(dataUrl);
+          sigCache.set(dataUrl, png);
+          return png;
+        }
+
+        for (const f of fields){
+          const x = pxToPdf(f.x);
+          const w = pxToPdf(f.w);
+          const h = pxToPdf(f.h);
+          const y = pxToPdf(vH - (f.y + f.h)); // 转成 PDF y（左下为原点）
+
+          if (f.type === 'checkbox'){
+            if (f.checked){
+              // 画一个勾（用字符）
+              page.drawText('✓', {
+                x: x + w*0.15,
+                y: y + h*0.08,
+                size: Math.max(10, h*0.9),
+                font
+              });
+            }
+          } else if (f.type === 'signature'){
+            if (f.sigDataUrl){
+              const png = await getPng(f.sigDataUrl);
+              page.drawImage(png, { x, y, width: w, height: h });
+            }
+          } else {
+            const text =
+              (f.type === 'date') ? (f.value || nowDateStr()) :
+              (f.type === 'printname') ? (f.value || '') :
+              (f.value || '');
+
+            // 简单文本绘制：不做复杂换行（多行字段建议你用 textarea + 导出时换行也可加）
+            const fontSize = Math.max(10, Math.min(14, h*0.6));
+            const padX = Math.min(6, w*0.08);
+            const padY = Math.min(4, h*0.15);
+
+            if (f.type === 'textarea'){
+              // 简易换行：按字段宽度粗略切
+              const maxCharsPerLine = Math.max(10, Math.floor((w / (fontSize * 0.6))));
+              const lines = [];
+              const raw = String(text).replace(/\r\n/g, '\n');
+              for (const para of raw.split('\n')){
+                let cur = '';
+                for (const ch of para){
+                  cur += ch;
+                  if (cur.length >= maxCharsPerLine){
+                    lines.push(cur);
+                    cur = '';
+                  }
+                }
+                if (cur) lines.push(cur);
+              }
+              const lineH = fontSize * 1.2;
+              let yy = y + h - padY - fontSize;
+              for (const line of lines){
+                if (yy < y) break;
+                page.drawText(line, { x: x + padX, y: yy, size: fontSize, font });
+                yy -= lineH;
+              }
+            } else {
+              page.drawText(String(text), { x: x + padX, y: y + padY, size: fontSize, font });
+            }
+          }
+        }
+
+        // flatten：路线B 本质是“画回内容”，即使不 flatten 也基本固定
+        // 这里保留选项只是给你心理安全感：导出即固定
+        const outBytes = await pdfDoc.save();
+        setGenerated(new Blob([outBytes], { type:'application/pdf' }));
+        setStatus('已导出');
+        alert('导出完成。建议点“打开预览”确认。');
+      } catch(e){
+        console.error(e);
+        setStatus('导出失败');
+        alert('导出失败：' + (e?.message || e));
+      }
+    });
+
+    // ====== 启动：自动加载默认模板 ======
+    await loadTemplate();
   </script>
 </body>
 </html>
