@@ -149,11 +149,19 @@
       try {
         const res = await fetch('consent_form.pdf', { cache: 'no-store' });
         if (!res.ok) throw new Error('fetch failed');
-        originalPdfBytes = await res.arrayBuffer();
-        await renderPreview(originalPdfBytes);
+
+        const buf = await res.arrayBuffer();
+
+    // ✅ 关键：复制两份，避免 detached ArrayBuffer
+        const pdfjsBytes = buf.slice(0);
+        originalPdfBytes = buf.slice(0);
+
+        await renderPreview(pdfjsBytes);
+
         alert('模板已加载。');
       } catch (e) {
-        alert('找不到 consent_form.pdf：请确认它在仓库根目录，且大小写一致。');
+        console.error(e);
+        alert('找不到 consent_form.pdf 或加载失败');
       }
     };
 
