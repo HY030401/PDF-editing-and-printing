@@ -367,23 +367,30 @@
       }
 
       // checkbox：画框 + 对勾
-      function drawCheckBox(x, y, size, checked) {
-        page.drawRectangle({
-          x, y, width: size, height: size,
-          borderWidth: 1, borderColor: PDFLib.rgb(0,0,0),
-          color: PDFLib.rgb(1,1,1),
-        });
-        if (checked) {
-          page.drawLine({ start: { x: x + 2, y: y + size*0.45 }, end: { x: x + size*0.4, y: y + 2 }, thickness: 2, color: PDFLib.rgb(0,0,0) });
-          page.drawLine({ start: { x: x + size*0.38, y: y + 2 }, end: { x: x + size - 2, y: y + size - 2 }, thickness: 2, color: PDFLib.rgb(0,0,0) });
-        }
-      }
+    function drawCheckMarkOnly(x, y, size) {
+      // 只画对勾（两条线），不画外面的方框
+      page.drawLine({
+        start: { x: x + 1.5, y: y + size * 0.45 },
+        end:   { x: x + size * 0.40, y: y + 1.5 },
+        thickness: 1.6,
+        color: PDFLib.rgb(0,0,0),
+      });
+      page.drawLine({
+        start: { x: x + size * 0.38, y: y + 1.5 },
+        end:   { x: x + size - 1.5,  y: y + size - 1.5 },
+        thickness: 1.6,
+        color: PDFLib.rgb(0,0,0),
+      });
+    }
 
-      for (const f of FIELDS) {
-        if (f.type === 'check') {
-          drawCheckBox(f.x, f.y, f.size || 12, getCheckedById(f.id));
+    for (const f of FIELDS) {
+      if (f.type === 'check') {
+        if (getCheckedById(f.id)) {
+          drawCheckMarkOnly(f.x, f.y, f.size || 12);
         }
+        // 未勾选就什么都不画（不会出现方框）
       }
+    }
 
       // radio：画圆 + 实心点
       const sens = getRadioValue('sensitive', '');
@@ -486,3 +493,4 @@
   </script>
 </body>
 </html>
+
