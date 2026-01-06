@@ -48,10 +48,9 @@
 <body>
   <h1>PDF 固定模板填写（文字 / 日期 / 勾选 / 单选 / 签名）</h1>
 
+  <!-- ✅ 只保留三个按钮：预览 / 清空签名 / 下载 -->
   <div class="row" style="margin-bottom:10px">
-    <button id="loadTpl" class="btn secondary">加载模板（consent_form.pdf）</button>
-    <button id="exportBtn" class="btn">生成 PDF</button>
-    <button id="togglePreviewBtn" class="btn secondary" disabled>打开预览</button>
+    <button id="previewBtn" class="btn secondary" disabled>预览</button>
     <button id="downloadBtn" class="btn secondary" disabled>下载 PDF</button>
     <button id="sigClear" class="btn warn" disabled>清空手写签名</button>
   </div>
@@ -61,11 +60,10 @@
     <div id="overlay"></div>
   </div>
 
-  <!-- ✅ 页面内嵌预览，不怕 window.open 被拦 -->
+  <!-- ✅ 页面内嵌预览 -->
   <div id="previewWrap">
     <div class="row" style="margin:10px 0;">
       <div class="muted">预览（生成后的 PDF）</div>
-      <button id="closePreviewBtn" class="btn secondary">关闭预览</button>
     </div>
     <iframe id="previewFrame"></iframe>
   </div>
@@ -76,9 +74,7 @@
 
   <script>
     /*****************************************************************
-     * 字段配置（按 consent_form.pdf 的真实框/勾选框定位）
-     * 坐标单位：PDF 点(pt)，原点在左下角（pdf-lib 使用的坐标系）
-     * 页面尺寸：612 x 792 (Letter)
+     * 字段配置（保持你当前坐标不变）
      *****************************************************************/
     const FIELDS = [
       { id:'firstName', type:'text',  page:0, x:151.8, y:647.6, w: 79.2, h:14.3, fontSize:12, placeholder:'First Name' },
@@ -109,9 +105,7 @@
       { id:'init6', type:'check', page:0, x:90.0, y:125.0, size:12 },
 
       { id:'printName', type:'text', page:0, x:156.1, y:83.0, w:79.1, h:14.2, fontSize:12, placeholder:'Print Name' },
-
       { id:'signature', type:'sig',  page:0, x:284.5, y:80.0, w:90.0, h:30.0 },
-
       { id:'signDate',  type:'date', page:0, x:400.5, y:83.0, w:79.1, h:14.2, fontSize:12 },
     ];
 
@@ -121,14 +115,12 @@
     const pdfCanvas = document.getElementById('pdfCanvas');
     const overlay = document.getElementById('overlay');
 
-    const exportBtn = document.getElementById('exportBtn');
-    const togglePreviewBtn = document.getElementById('togglePreviewBtn');
+    const previewBtn = document.getElementById('previewBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const sigClearBtn = document.getElementById('sigClear');
 
     const previewWrap = document.getElementById('previewWrap');
     const previewFrame = document.getElementById('previewFrame');
-    const closePreviewBtn = document.getElementById('closePreviewBtn');
 
     /*****************************************************************
      * 状态
@@ -137,35 +129,40 @@
     let viewport = null;
     const scale = 1.5;
 
-    let generatedBlobUrl = null; // 仅用于 iframe 预览
-    let generatedBlob = null;    // ✅ 用于下载（更稳）
+    let generatedBlobUrl = null; // 用于 iframe 预览
+    let generatedBlob = null;    // 用于下载
     let sigPad = null;
 
     /*****************************************************************
-     * 1) 加载固定模板 PDF
+     * ✅ 自动加载模板（页面刷新即加载）
      *****************************************************************/
-    document.getElementById('loadTpl').onclick = async () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       try {
-        const res = await fetch('consent_form.pdf', { cache: 'no-store' });
-        if (!res.ok) throw new Error('fetch failed');
-
-        const buf = await res.arrayBuffer();
-
-    // ✅ 关键：复制两份，避免 detached ArrayBuffer
-        const pdfjsBytes = buf.slice(0);
-        originalPdfBytes = buf.slice(0);
-
-        await renderPreview(pdfjsBytes);
-
-        alert('模板已加载。');
+        await loadTemplate();
       } catch (e) {
         console.error(e);
-        alert('找不到 consent_form.pdf 或加载失败');
+        alert('模板加载失败：请确认 consent_form.pdf 在根目录且大小写一致。');
       }
-    };
+    });
+
+    async function loadTemplate() {
+      const res = await fetch('consent_form.pdf', { cache: 'no-store' });
+      if (!res.ok) throw new Error('fetch failed');
+
+      const buf = await res.arrayBuffer();
+
+      // ✅ 关键：复制两份，避免 detached ArrayBuffer
+      const pdfjsBytes = buf.slice(0);
+      originalPdfBytes = buf.slice(0);
+
+      await renderPreview(pdfjsBytes);
+
+      // 模板加载成功后才能预览/下载
+      previewBtn.disabled = false;
+    }
 
     /*****************************************************************
-     * 2) 渲染 PDF 预览（第一页）
+     * 渲染 PDF 预览（第一页）
      *****************************************************************/
     async function renderPreview(bytes) {
       const loadingTask = pdfjsLib.getDocument({ data: bytes });
@@ -186,7 +183,7 @@
 
       buildOverlayFields();
 
-      // 清空导出结果
+      // 每次重新加载模板，清掉导出结果与预览
       setGenerated(null);
       hidePreview();
     }
@@ -200,12 +197,12 @@
     function pdfPtToDomPx(xPt, yPt) {
       const { pxPerPtX, pxPerPtY } = getScaleFactors();
       const x = xPt * pxPerPtX;
-      const y = (viewport.viewBox[3] - yPt) * pxPerPtY; // 翻转Y（DOM左上原点）
+      const y = (viewport.viewBox[3] - yPt) * pxPerPtY;
       return { x, y };
     }
 
     /*****************************************************************
-     * 3) Overlay 固定控件
+     * Overlay 固定控件
      *****************************************************************/
     function buildOverlayFields() {
       overlay.innerHTML = '';
@@ -295,7 +292,7 @@
     });
 
     /*****************************************************************
-     * 4) 生成 PDF（写回）
+     * 生成 PDF（写回）——保持你的绘制逻辑不变
      *****************************************************************/
     function formatMMDD(dateValue) {
       if (!dateValue) return '';
@@ -320,33 +317,25 @@
     }
 
     function setGenerated(blob) {
-      // 清旧预览 url
       if (generatedBlobUrl) {
         URL.revokeObjectURL(generatedBlobUrl);
         generatedBlobUrl = null;
       }
 
       generatedBlob = blob;
-
-      togglePreviewBtn.disabled = true;
       downloadBtn.disabled = true;
 
       if (!blob) return;
 
-      // 预览用 url
       generatedBlobUrl = URL.createObjectURL(blob);
-
-      togglePreviewBtn.disabled = false;
       downloadBtn.disabled = false;
     }
 
-    exportBtn.addEventListener('click', async () => {
-      if (!originalPdfBytes) {
-        alert('请先点击“加载模板（consent_form.pdf）”。');
-        return;
-      }
+    async function generatePdfBlob() {
+      if (!originalPdfBytes) return null;
 
-      const pdfDoc = await PDFLib.PDFDocument.load(originalPdfBytes);
+      // ✅ 额外稳：每次生成都 slice 一份给 pdf-lib
+      const pdfDoc = await PDFLib.PDFDocument.load(originalPdfBytes.slice(0));
       const page = pdfDoc.getPages()[0];
       const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
 
@@ -365,33 +354,31 @@
         }
       }
 
-      // checkbox：画框 + 对勾
-    function drawCheckMarkOnly(x, y, size) {
-      // 只画对勾（两条线），不画外面的方框
-      page.drawLine({
-        start: { x: x + 1.5, y: y + size * 0.45 },
-        end:   { x: x + size * 0.40, y: y + 1.5 },
-        thickness: 1.6,
-        color: PDFLib.rgb(0,0,0),
-      });
-      page.drawLine({
-        start: { x: x + size * 0.38, y: y + 1.5 },
-        end:   { x: x + size - 1.5,  y: y + size - 1.5 },
-        thickness: 1.6,
-        color: PDFLib.rgb(0,0,0),
-      });
-    }
-
-    for (const f of FIELDS) {
-      if (f.type === 'check') {
-        if (getCheckedById(f.id)) {
-          drawCheckMarkOnly(f.x, f.y, f.size || 12);
-        }
-        // 未勾选就什么都不画（不会出现方框）
+      // checkbox：只画对勾
+      function drawCheckMarkOnly(x, y, size) {
+        page.drawLine({
+          start: { x: x + 1.5, y: y + size * 0.45 },
+          end:   { x: x + size * 0.40, y: y + 1.5 },
+          thickness: 1.6,
+          color: PDFLib.rgb(0,0,0),
+        });
+        page.drawLine({
+          start: { x: x + size * 0.38, y: y + 1.5 },
+          end:   { x: x + size - 1.5,  y: y + size - 1.5 },
+          thickness: 1.6,
+          color: PDFLib.rgb(0,0,0),
+        });
       }
-    }
 
-      // radio：画圆 + 实心点
+      for (const f of FIELDS) {
+        if (f.type === 'check') {
+          if (getCheckedById(f.id)) {
+            drawCheckMarkOnly(f.x, f.y, f.size || 12);
+          }
+        }
+      }
+
+      // radio：画圆 + 实心点（保持你当前逻辑不变）
       const sens = getRadioValue('sensitive', '');
       const sensField = FIELDS.find(x => x.type === 'radio' && x.id === 'sensitive');
       if (sensField) {
@@ -413,91 +400,108 @@
         }
       }
 
-      // 签名：优先手写，否则打印体签名
+      // 签名：仅手写签名（保持你当前逻辑不变）
       const sigField = FIELDS.find(x => x.id === 'signature');
-
       if (sigField) {
-    // 只要有手写签名就写入 PDF
-      if (sigPad && !sigPad.isEmpty()) {
-        const pngDataUrl = sigPad.toDataURL('image/png');
-        const png = await pdfDoc.embedPng(pngDataUrl);
-        page.drawImage(png, {
-          x: sigField.x,
-          y: sigField.y,
-          width: sigField.w,
-          height: sigField.h
-        });
+        if (sigPad && !sigPad.isEmpty()) {
+          const pngDataUrl = sigPad.toDataURL('image/png');
+          const png = await pdfDoc.embedPng(pngDataUrl);
+          page.drawImage(png, {
+            x: sigField.x,
+            y: sigField.y,
+            width: sigField.w,
+            height: sigField.h
+          });
+        }
       }
+
+      const bytes = await pdfDoc.save();
+      return new Blob([bytes], { type: 'application/pdf' });
     }
-      
-    const bytes = await pdfDoc.save();
-    const blob = new Blob([bytes], { type: 'application/pdf' });
-    setGenerated(blob);
-
-      // 如果预览已打开，自动刷新 iframe
-      if (previewWrap.style.display !== 'none' && generatedBlobUrl) {
-        previewFrame.src = generatedBlobUrl;
-      }
-
-      alert('已生成 PDF。');
-    });
 
     /*****************************************************************
-     * 5) 预览：页面内嵌 iframe（不走 window.open）
+     * ✅ 预览按钮：点击后先生成，再展示预览（合并生成+预览）
+     * - 若预览已打开：再次点击则关闭预览（仍然只有三个按钮）
      *****************************************************************/
     function showPreview() {
       if (!generatedBlobUrl) return;
       previewWrap.style.display = 'block';
       previewFrame.src = generatedBlobUrl;
-      togglePreviewBtn.textContent = '关闭预览';
+      previewBtn.textContent = '关闭预览';
     }
 
     function hidePreview() {
       previewWrap.style.display = 'none';
       previewFrame.src = 'about:blank';
-      togglePreviewBtn.textContent = '打开预览';
+      previewBtn.textContent = '预览';
     }
 
-    togglePreviewBtn.addEventListener('click', () => {
-      if (previewWrap.style.display === 'none' || previewWrap.style.display === '') {
-        showPreview();
-      } else {
+    previewBtn.addEventListener('click', async () => {
+      // 已打开 -> 关闭
+      if (previewWrap.style.display !== 'none' && previewWrap.style.display !== '') {
         hidePreview();
+        return;
       }
+
+      // 未打开 -> 先生成再预览
+      const blob = await generatePdfBlob();
+      if (!blob) {
+        alert('模板还在加载中，请稍等片刻再试。');
+        return;
+      }
+      setGenerated(blob);
+      showPreview();
     });
 
-    closePreviewBtn.addEventListener('click', hidePreview);
+    /*****************************************************************
+     * ✅ 下载命名：FirstName_LastName_Consent.pdf
+     *****************************************************************/
+    function sanitizeFilenamePart(s) {
+      return String(s || '')
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/[\/\\:*?"<>|]/g, '');
+    }
+
+    function buildDownloadName() {
+      const first = sanitizeFilenamePart(getValueById('firstName'));
+      const last  = sanitizeFilenamePart(getValueById('lastName'));
+      const base = `${first}_${last}`.replace(/^_+|_+$/g, '');
+      return base ? `${base}_Consent.pdf` : 'Filled.pdf';
+    }
 
     /*****************************************************************
-     * 6) 下载：保存 Blob + 更稳的触发方式
+     * 下载：如果用户没点过预览（还没生成），会自动先生成再下载
      *****************************************************************/
-    downloadBtn.addEventListener('click', () => {
+    downloadBtn.addEventListener('click', async () => {
+      // 若没有生成过，自动生成一次（更符合用户直觉）
+      if (!generatedBlob) {
+        const blob = await generatePdfBlob();
+        if (!blob) {
+          alert('模板还在加载中，请稍等片刻再试。');
+          return;
+        }
+        setGenerated(blob);
+      }
+
       if (!generatedBlob) return;
 
-      // 兼容极少数旧环境
       if (window.navigator && window.navigator.msSaveOrOpenBlob) {
-        window.navigator.msSaveOrOpenBlob(generatedBlob, 'Filled.pdf');
+        window.navigator.msSaveOrOpenBlob(generatedBlob, buildDownloadName());
         return;
       }
 
       const url = URL.createObjectURL(generatedBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'Filled.pdf';
+      a.download = buildDownloadName();
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       a.remove();
 
-      // 延迟释放，避免太快 revoke 导致下载失败
       setTimeout(() => URL.revokeObjectURL(url), 1500);
     });
   </script>
 </body>
 </html>
-
-
-
-
-
-
