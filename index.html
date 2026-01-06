@@ -97,7 +97,7 @@
       { id:'sensitive', type:'radio', page:0,
         options: [
           { id:'sensYes', value:'YES', x:310.0, y:549.0 },
-          { id:'sensNo',  value:'NO',  x:388.0, y:549.0 },
+          { id:'sensNo',  value:'NO',  x:380.0, y:549.0 },
         ]
       },
 
@@ -108,10 +108,9 @@
       { id:'init5', type:'check', page:0, x:90.0, y:155.0, size:12 },
       { id:'init6', type:'check', page:0, x:90.0, y:125.0, size:12 },
 
-      { id:'printName', type:'text', page:0, x:156.1, y:83.0, w:79.1, h:14.3, fontSize:12, placeholder:'Print Name' },
-      { id:'sigPrint',  type:'text', page:0, x:310.0, y:83.0, w:130.0, h:14.3, fontSize:12, placeholder:'打印体签名（可选）' },
+      { id:'printName', type:'text', page:0, x:156.1, y:83.0, w:79.1, h:14.2, fontSize:12, placeholder:'Print Name' },
 
-      { id:'signature', type:'sig',  page:0, x:284.5, y:83.0, w:86.0, h:28.0 },
+      { id:'signature', type:'sig',  page:0, x:284.5, y:80.0, w:90.0, h:30.0 },
 
       { id:'signDate',  type:'date', page:0, x:400.5, y:83.0, w:79.1, h:14.2, fontSize:12 },
     ];
@@ -415,22 +414,25 @@
       }
 
       // 签名：优先手写，否则打印体签名
-      const sigText = getValueById('sigPrint').trim();
       const sigField = FIELDS.find(x => x.id === 'signature');
 
       if (sigField) {
-        if (sigPad && !sigPad.isEmpty()) {
-          const pngDataUrl = sigPad.toDataURL('image/png');
-          const png = await pdfDoc.embedPng(pngDataUrl);
-          page.drawImage(png, { x: sigField.x, y: sigField.y, width: sigField.w, height: sigField.h });
-        } else if (sigText) {
-          page.drawText(sigText, { x: sigField.x, y: sigField.y + sigField.h * 0.35, size: 14, font, color: PDFLib.rgb(0,0,0) });
-        }
+    // 只要有手写签名就写入 PDF
+      if (sigPad && !sigPad.isEmpty()) {
+        const pngDataUrl = sigPad.toDataURL('image/png');
+        const png = await pdfDoc.embedPng(pngDataUrl);
+        page.drawImage(png, {
+          x: sigField.x,
+          y: sigField.y,
+          width: sigField.w,
+          height: sigField.h
+        });
       }
-
-      const bytes = await pdfDoc.save();
-      const blob = new Blob([bytes], { type: 'application/pdf' });
-      setGenerated(blob);
+    }
+      
+    const bytes = await pdfDoc.save();
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    setGenerated(blob);
 
       // 如果预览已打开，自动刷新 iframe
       if (previewWrap.style.display !== 'none' && generatedBlobUrl) {
@@ -493,6 +495,7 @@
   </script>
 </body>
 </html>
+
 
 
 
