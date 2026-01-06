@@ -28,11 +28,11 @@
   .check, .radio { width:18px; height:18px; transform: translate(-2px, -2px); }
   .sigCanvas { border:1px dashed #9ca3af; background:#fff; border-radius:10px; touch-action: none; }
 
-  /* ✅ Desktop: page-embedded preview */
+  /* Desktop: page-embedded preview */
   #previewWrap { margin-top: 14px; display:none; }
   #previewFrame { width: 100%; height: 70vh; border: 1px solid #e5e7eb; border-radius: 12px; }
 
-  /* ✅ Mobile full-screen preview modal */
+  /* Mobile full-screen preview modal */
   #previewModal {
     position: fixed;
     inset: 0;
@@ -79,39 +79,39 @@
   }
 </style>
 
-<!-- ✅ 按你当前仓库结构，从 /build/ 加载 PDF.js -->
+<!-- 按你当前仓库结构，从 /build/ 加载 PDF.js -->
 <script type="module">
   import * as pdfjsLib from './build/pdf.mjs';
   pdfjsLib.GlobalWorkerOptions.workerSrc = './build/pdf.worker.mjs';
   window.pdfjsLib = pdfjsLib;
 </script>
 
-<!-- ✅ pdf-lib + 手写签名库 -->
+<!-- pdf-lib + 手写签名库 -->
 <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 </head>
 
 <body>
 
-<!-- ✅ 只保留三个按钮：预览 / 清空签名 / 下载 -->
+<!-- 只保留三个按钮：预览 / 清空签名 / 下载 -->
 <div class="row" style="margin-bottom:10px">
   <button id="previewBtn" class="btn secondary" disabled>Preview</button>
   <button id="downloadBtn" class="btn secondary" disabled>Download PDF</button>
   <button id="sigClear" class="btn warn" disabled>Clear signature</button>
 </div>
 
-<!-- ✅ 编辑区：只放 canvas + overlay -->
+<!-- 编辑区：只放 canvas + overlay -->
 <div id="stage">
   <canvas id="pdfCanvas"></canvas>
   <div id="overlay"></div>
 </div>
 
-<!-- ✅ Desktop: 页面内预览（桌面显示，手机隐藏） -->
+<!-- Desktop: 页面内预览（桌面显示，手机隐藏） -->
 <div id="previewWrap">
   <iframe id="previewFrame"></iframe>
 </div>
 
-<!-- ✅ Mobile: 全屏预览 -->
+<!-- Mobile: 全屏预览 -->
 <div id="previewModal" aria-hidden="true">
   <div class="panel">
     <div class="bar">
@@ -188,7 +188,7 @@
     let sigPad = null;
 
     /*****************************************************************
-     * ✅ 自动加载模板（页面刷新即加载）
+     * 自动加载模板（页面刷新即加载）
      *****************************************************************/
     window.addEventListener('DOMContentLoaded', async () => {
       try {
@@ -205,7 +205,7 @@
 
       const buf = await res.arrayBuffer();
 
-      // ✅ 关键：复制两份，避免 detached ArrayBuffer
+      // 复制两份，避免 detached ArrayBuffer
       const pdfjsBytes = buf.slice(0);
       originalPdfBytes = buf.slice(0);
 
@@ -347,7 +347,7 @@
     });
 
     /*****************************************************************
-     * 生成 PDF（写回）——保持你的绘制逻辑不变
+     * 生成 PDF
      *****************************************************************/
     function formatMMDD(dateValue) {
       if (!dateValue) return '';
@@ -389,7 +389,7 @@
     async function generatePdfBlob() {
       if (!originalPdfBytes) return null;
 
-      // ✅ 额外稳：每次生成都 slice 一份给 pdf-lib
+      // 额外稳：每次生成都 slice 一份给 pdf-lib
       const pdfDoc = await PDFLib.PDFDocument.load(originalPdfBytes.slice(0));
       const page = pdfDoc.getPages()[0];
       const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
@@ -455,7 +455,7 @@
         }
       }
 
-      // 签名：仅手写签名
+      // 签名
       const sigField = FIELDS.find(x => x.id === 'signature');
       if (sigField) {
         if (sigPad && !sigPad.isEmpty()) {
@@ -475,7 +475,7 @@
     }
 
     /*****************************************************************
-     * ✅ 预览按钮：点击后先生成，再展示预览（合并生成+预览）
+     *   预览按钮：点击后先生成，再展示预览（合并生成+预览）
      * - 若预览已打开：再次点击则关闭预览
      * - 手机端全屏
      *****************************************************************/
@@ -490,7 +490,7 @@ function lockBodyScroll(lock) {
 function showPreview() {
   if (!generatedBlobUrl) return;
 
-  // ✅ Mobile: full-screen modal
+  // Mobile: full-screen modal
   if (isMobileView() && previewModal && previewModalFrame) {
     previewModal.style.display = 'block';
     previewModal.setAttribute('aria-hidden', 'false');
@@ -501,7 +501,7 @@ function showPreview() {
     return;
   }
 
-  // ✅ Desktop: page-embedded iframe
+  // Desktop: page-embedded iframe
   if (!previewWrap || !previewFrame) return;
   previewWrap.style.display = 'block';
   previewFrame.src = generatedBlobUrl;
@@ -509,7 +509,7 @@ function showPreview() {
 }
 
 function hidePreview() {
-  // ✅ Mobile: close modal
+  // Mobile: close modal
   if (previewModal && previewModalFrame) {
     previewModal.style.display = 'none';
     previewModal.setAttribute('aria-hidden', 'true');
@@ -517,7 +517,7 @@ function hidePreview() {
     lockBodyScroll(false);
   }
 
-  // ✅ Desktop: close embedded preview
+  // Desktop: close embedded preview
   if (previewWrap && previewFrame) {
     previewWrap.style.display = 'none';
     previewFrame.src = 'about:blank';
@@ -526,12 +526,12 @@ function hidePreview() {
   previewBtn.textContent = 'Preview';
 }
 
-// ✅ Mobile modal close button
+// Mobile modal close button
 if (closePreviewModalBtn) {
   closePreviewModalBtn.addEventListener('click', hidePreview);
 }
 
-// ✅ Preview button: if preview already open -> close; else generate then show
+// Preview button: if preview already open -> close; else generate then show
 previewBtn.addEventListener('click', async () => {
   const mobileOpen = previewModal && previewModal.style.display === 'block';
   const desktopOpen = previewWrap && previewWrap.style.display !== 'none' && previewWrap.style.display !== '';
@@ -555,7 +555,7 @@ previewBtn.addEventListener('click', async () => {
 
 
     /*****************************************************************
-     * ✅ 下载命名：FirstName_LastName_Consent.pdf
+     * 下载命名：FirstName_LastName_Consent.pdf
      *****************************************************************/
     function sanitizeFilenamePart(s) {
       return String(s || '')
@@ -580,7 +580,7 @@ previewBtn.addEventListener('click', async () => {
     }
 
     /*****************************************************************
-     * 下载：如果用户没点过预览（还没生成），会自动先生成再下载
+     * 下载：如果用户没点过预览，会自动先生成再下载
      *****************************************************************/
     downloadBtn.addEventListener('click', async () => {
       const blob = await generatePdfBlob();
@@ -614,4 +614,5 @@ previewBtn.addEventListener('click', async () => {
       </script>
 </body>
 </html>
+
 
