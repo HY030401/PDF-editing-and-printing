@@ -582,27 +582,27 @@ previewBtn.addEventListener('click', async () => {
      * 下载：如果用户没点过预览（还没生成），会自动先生成再下载
      *****************************************************************/
     downloadBtn.addEventListener('click', async () => {
-      // 若没有生成过，自动生成一次（更符合用户直觉）
-      if (!generatedBlob) {
-        const blob = await generatePdfBlob();
-        if (!blob) {
-          alert('Loading... Please wait.');
-          return;
-        }
-        setGenerated(blob);
+      const blob = await generatePdfBlob();
+      if (!blob) {
+        alert('Loading... Please wait.');
+        return;
       }
-
+      setGenerated(blob);
+  
       if (!generatedBlob) return;
 
+      const filename = buildDownloadName();
+
+  // 兼容极少数旧环境
       if (window.navigator && window.navigator.msSaveOrOpenBlob) {
-        window.navigator.msSaveOrOpenBlob(generatedBlob, buildDownloadName());
+        window.navigator.msSaveOrOpenBlob(generatedBlob, filename);
         return;
       }
 
       const url = URL.createObjectURL(generatedBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = buildDownloadName();
+      a.download = filename;
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
@@ -610,9 +610,6 @@ previewBtn.addEventListener('click', async () => {
 
       setTimeout(() => URL.revokeObjectURL(url), 1500);
     });
-  </script>
+      </script>
 </body>
 </html>
-
-
-
