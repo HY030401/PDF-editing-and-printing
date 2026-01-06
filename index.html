@@ -46,13 +46,12 @@
 </head>
 
 <body>
-  <h1>PDF 固定模板填写（文字 / 日期 / 勾选 / 单选 / 签名）</h1>
 
   <!-- ✅ 只保留三个按钮：预览 / 清空签名 / 下载 -->
   <div class="row" style="margin-bottom:10px">
-    <button id="previewBtn" class="btn secondary" disabled>预览</button>
-    <button id="downloadBtn" class="btn secondary" disabled>下载 PDF</button>
-    <button id="sigClear" class="btn warn" disabled>清空手写签名</button>
+    <button id="previewBtn" class="btn secondary" disabled>Preview</button>
+    <button id="downloadBtn" class="btn secondary" disabled>Download PDF</button>
+    <button id="sigClear" class="btn warn" disabled>Clear signature</button>
   </div>
 
   <div id="stage">
@@ -60,17 +59,6 @@
     <div id="overlay"></div>
   </div>
 
-  <!-- ✅ 页面内嵌预览 -->
-  <div id="previewWrap">
-    <div class="row" style="margin:10px 0;">
-      <div class="muted">预览（生成后的 PDF）</div>
-    </div>
-    <iframe id="previewFrame"></iframe>
-  </div>
-
-  <div class="muted" style="margin-top:10px;">
-    ✅ 根目录必须有：index.html、consent_form.pdf、build/pdf.mjs、build/pdf.worker.mjs
-  </div>
 
   <script>
     /*****************************************************************
@@ -378,7 +366,7 @@
         }
       }
 
-      // radio：画圆 + 实心点（保持你当前逻辑不变）
+      // radio：画圆 + 实心点
       const sens = getRadioValue('sensitive', '');
       const sensField = FIELDS.find(x => x.type === 'radio' && x.id === 'sensitive');
       if (sensField) {
@@ -400,7 +388,7 @@
         }
       }
 
-      // 签名：仅手写签名（保持你当前逻辑不变）
+      // 签名：仅手写签名
       const sigField = FIELDS.find(x => x.id === 'signature');
       if (sigField) {
         if (sigPad && !sigPad.isEmpty()) {
@@ -427,13 +415,13 @@
       if (!generatedBlobUrl) return;
       previewWrap.style.display = 'block';
       previewFrame.src = generatedBlobUrl;
-      previewBtn.textContent = '关闭预览';
+      previewBtn.textContent = 'Close Preview';
     }
 
     function hidePreview() {
       previewWrap.style.display = 'none';
       previewFrame.src = 'about:blank';
-      previewBtn.textContent = '预览';
+      previewBtn.textContent = 'Preview';
     }
 
     previewBtn.addEventListener('click', async () => {
@@ -446,7 +434,7 @@
       // 未打开 -> 先生成再预览
       const blob = await generatePdfBlob();
       if (!blob) {
-        alert('模板还在加载中，请稍等片刻再试。');
+        alert('Loading... please wait.');
         return;
       }
       setGenerated(blob);
@@ -466,8 +454,16 @@
     function buildDownloadName() {
       const first = sanitizeFilenamePart(getValueById('firstName'));
       const last  = sanitizeFilenamePart(getValueById('lastName'));
-      const base = `${first}_${last}`.replace(/^_+|_+$/g, '');
-      return base ? `${base}.pdf` : 'Filled.pdf';
+
+  // 生成 fn_ln.pdf
+      if (first && last) return `${first}_${last}.pdf`;
+
+  // 只填了一个名字时：名字.pdf
+      if (first) return `${first}.pdf`;
+      if (last)  return `${last}.pdf`;
+
+  // 都没填：兜底
+      return 'Filled.pdf';
     }
 
     /*****************************************************************
@@ -478,7 +474,7 @@
       if (!generatedBlob) {
         const blob = await generatePdfBlob();
         if (!blob) {
-          alert('模板还在加载中，请稍等片刻再试。');
+          alert('Loading... Please wait.');
           return;
         }
         setGenerated(blob);
@@ -505,4 +501,3 @@
   </script>
 </body>
 </html>
-
