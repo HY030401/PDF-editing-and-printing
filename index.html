@@ -467,7 +467,7 @@
       const first = sanitizeFilenamePart(getValueById('firstName'));
       const last  = sanitizeFilenamePart(getValueById('lastName'));
       const base = `${first}_${last}`.replace(/^_+|_+$/g, '');
-      return base ? `${base}_Consent.pdf` : 'Filled.pdf';
+      return base ? `${base}.pdf` : 'Filled.pdf';
     }
 
     /*****************************************************************
@@ -505,3 +505,4 @@
   </script>
 </body>
 </html>
+
