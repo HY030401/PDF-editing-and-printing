@@ -5,62 +5,124 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>Chiclash Boutique Form</title>
 
-  <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", Arial; margin: 16px; }
-    h1 { font-size: 18px; margin: 0 0 10px; }
-    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .btn { border: 0; border-radius: 10px; padding: 10px 12px; cursor: pointer; background: #2563eb; color: white; font-weight: 600; }
-    .btn.secondary { background: #e5e7eb; color: #111827; }
-    .btn.warn { background: #ef4444; }
-    .muted { color: #6b7280; font-size: 12px; }
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", Arial; margin: 16px; }
+  h1 { font-size: 18px; margin: 0 0 10px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn { border: 0; border-radius: 10px; padding: 10px 12px; cursor: pointer; background: #2563eb; color: white; font-weight: 600; }
+  .btn.secondary { background: #e5e7eb; color: #111827; }
+  .btn.warn { background: #ef4444; }
+  .muted { color: #6b7280; font-size: 12px; }
 
-    #stage { position: relative; display: inline-block; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; }
-    #pdfCanvas { display:block; border-radius: 8px; }
-    #overlay { position:absolute; left:8px; top:8px; }
+  #stage { position: relative; display: inline-block; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; }
+  #pdfCanvas { display:block; border-radius: 8px; }
+  #overlay { position:absolute; left:8px; top:8px; }
 
-    .field { position:absolute; }
-    .in {
-      box-sizing:border-box;
-      border:1px solid #94a3b8; border-radius:8px;
-      padding:6px 8px; font-size:14px; background:#ffffffcc;
-    }
+  .field { position:absolute; }
+  .in {
+    box-sizing:border-box;
+    border:1px solid #94a3b8; border-radius:8px;
+    padding:6px 8px; font-size:14px; background:#ffffffcc;
+  }
 
-    .check, .radio { width:18px; height:18px; transform: translate(-2px, -2px); }
-    .sigCanvas { border:1px dashed #9ca3af; background:#fff; border-radius:10px; touch-action: none; }
+  .check, .radio { width:18px; height:18px; transform: translate(-2px, -2px); }
+  .sigCanvas { border:1px dashed #9ca3af; background:#fff; border-radius:10px; touch-action: none; }
 
-    /* ✅ 内嵌预览区域 */
-    #previewWrap { margin-top: 14px; display:none; }
-    #previewFrame { width: 100%; height: 70vh; border: 1px solid #e5e7eb; border-radius: 12px; }
-  </style>
+  /* ✅ Desktop: page-embedded preview */
+  #previewWrap { margin-top: 14px; display:none; }
+  #previewFrame { width: 100%; height: 70vh; border: 1px solid #e5e7eb; border-radius: 12px; }
 
-  <!-- ✅ 按你当前仓库结构，从 /build/ 加载 PDF.js -->
-  <script type="module">
-    import * as pdfjsLib from './build/pdf.mjs';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = './build/pdf.worker.mjs';
-    window.pdfjsLib = pdfjsLib;
-  </script>
+  /* ✅ Mobile full-screen preview modal */
+  #previewModal {
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.72);
+    display: none;
+    z-index: 9999;
+  }
+  #previewModal .panel {
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+  }
+  #previewModal .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  #previewModal .bar .title {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  #previewModal .bar button {
+    border: 0;
+    border-radius: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    background: #e5e7eb;
+    color: #111827;
+    font-weight: 600;
+  }
+  #previewModal iframe {
+    flex: 1;
+    width: 100%;
+    border: 0;
+  }
 
-  <!-- ✅ pdf-lib + 手写签名库 -->
-  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+  /* 手机端隐藏页面内 previewWrap，改用全屏 modal */
+  @media (max-width: 768px) {
+    #previewWrap { display: none !important; }
+  }
+</style>
+
+<!-- ✅ 按你当前仓库结构，从 /build/ 加载 PDF.js -->
+<script type="module">
+  import * as pdfjsLib from './build/pdf.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = './build/pdf.worker.mjs';
+  window.pdfjsLib = pdfjsLib;
+</script>
+
+<!-- ✅ pdf-lib + 手写签名库 -->
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 </head>
 
 <body>
 
-  <!-- ✅ 只保留三个按钮：预览 / 清空签名 / 下载 -->
-  <div class="row" style="margin-bottom:10px">
-    <button id="previewBtn" class="btn secondary" disabled>Preview</button>
-    <button id="downloadBtn" class="btn secondary" disabled>Download PDF</button>
-    <button id="sigClear" class="btn warn" disabled>Clear signature</button>
+<!-- ✅ 只保留三个按钮：预览 / 清空签名 / 下载 -->
+<div class="row" style="margin-bottom:10px">
+  <button id="previewBtn" class="btn secondary" disabled>Preview</button>
+  <button id="downloadBtn" class="btn secondary" disabled>Download PDF</button>
+  <button id="sigClear" class="btn warn" disabled>Clear signature</button>
+</div>
+
+<!-- ✅ 编辑区：只放 canvas + overlay -->
+<div id="stage">
+  <canvas id="pdfCanvas"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<!-- ✅ Desktop: 页面内预览（桌面显示，手机隐藏） -->
+<div id="previewWrap">
+  <iframe id="previewFrame"></iframe>
+</div>
+
+<!-- ✅ Mobile: 全屏预览 -->
+<div id="previewModal" aria-hidden="true">
+  <div class="panel">
+    <div class="bar">
+      <div class="title">Preview</div>
+      <button id="closePreviewModalBtn" type="button">Close</button>
+    </div>
+    <iframe id="previewModalFrame"></iframe>
   </div>
+</div>
 
-  <div id="stage">
-    <canvas id="pdfCanvas"></canvas>
-    <div id="overlay"></div>
-  </div>
-
-
-  <script>
+<script>
     /*****************************************************************
      * 字段配置（保持你当前坐标不变）
      *****************************************************************/
@@ -109,6 +171,10 @@
 
     const previewWrap = document.getElementById('previewWrap');
     const previewFrame = document.getElementById('previewFrame');
+
+    const previewModal = document.getElementById('previewModal');
+    const previewModalFrame = document.getElementById('previewModalFrame');
+    const closePreviewModalBtn = document.getElementById('closePreviewModalBtn');
 
     /*****************************************************************
      * 状态
@@ -409,37 +475,83 @@
 
     /*****************************************************************
      * ✅ 预览按钮：点击后先生成，再展示预览（合并生成+预览）
-     * - 若预览已打开：再次点击则关闭预览（仍然只有三个按钮）
+     * - 若预览已打开：再次点击则关闭预览
+     * - 手机端全屏
      *****************************************************************/
-    function showPreview() {
-      if (!generatedBlobUrl) return;
-      previewWrap.style.display = 'block';
-      previewFrame.src = generatedBlobUrl;
-      previewBtn.textContent = 'Close Preview';
-    }
+function isMobileView() {
+  return window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+}
 
-    function hidePreview() {
-      previewWrap.style.display = 'none';
-      previewFrame.src = 'about:blank';
-      previewBtn.textContent = 'Preview';
-    }
+function lockBodyScroll(lock) {
+  document.body.style.overflow = lock ? 'hidden' : '';
+}
 
-    previewBtn.addEventListener('click', async () => {
-      // 已打开 -> 关闭
-      if (previewWrap.style.display !== 'none' && previewWrap.style.display !== '') {
-        hidePreview();
-        return;
-      }
+function showPreview() {
+  if (!generatedBlobUrl) return;
 
-      // 未打开 -> 先生成再预览
-      const blob = await generatePdfBlob();
-      if (!blob) {
-        alert('Loading... please wait.');
-        return;
-      }
-      setGenerated(blob);
-      showPreview();
-    });
+  // ✅ Mobile: full-screen modal
+  if (isMobileView() && previewModal && previewModalFrame) {
+    previewModal.style.display = 'block';
+    previewModal.setAttribute('aria-hidden', 'false');
+    previewModalFrame.src = generatedBlobUrl;
+    lockBodyScroll(true);
+
+    previewBtn.textContent = 'Close Preview';
+    return;
+  }
+
+  // ✅ Desktop: page-embedded iframe
+  if (!previewWrap || !previewFrame) return;
+  previewWrap.style.display = 'block';
+  previewFrame.src = generatedBlobUrl;
+  previewBtn.textContent = 'Close Preview';
+}
+
+function hidePreview() {
+  // ✅ Mobile: close modal
+  if (previewModal && previewModalFrame) {
+    previewModal.style.display = 'none';
+    previewModal.setAttribute('aria-hidden', 'true');
+    previewModalFrame.src = 'about:blank';
+    lockBodyScroll(false);
+  }
+
+  // ✅ Desktop: close embedded preview
+  if (previewWrap && previewFrame) {
+    previewWrap.style.display = 'none';
+    previewFrame.src = 'about:blank';
+  }
+
+  previewBtn.textContent = 'Preview';
+}
+
+// ✅ Mobile modal close button
+if (closePreviewModalBtn) {
+  closePreviewModalBtn.addEventListener('click', hidePreview);
+}
+
+// ✅ Preview button: if preview already open -> close; else generate then show
+previewBtn.addEventListener('click', async () => {
+  const mobileOpen = previewModal && previewModal.style.display === 'block';
+  const desktopOpen = previewWrap && previewWrap.style.display !== 'none' && previewWrap.style.display !== '';
+  const isOpen = mobileOpen || desktopOpen;
+
+  if (isOpen) {
+    hidePreview();
+    return;
+  }
+
+  // 未打开 -> 先生成再预览
+  const blob = await generatePdfBlob();
+  if (!blob) {
+    alert('Loading... please wait.');
+    return;
+  }
+
+  setGenerated(blob);
+  showPreview();
+});
+
 
     /*****************************************************************
      * ✅ 下载命名：FirstName_LastName_Consent.pdf
@@ -501,4 +613,5 @@
   </script>
 </body>
 </html>
+
 
